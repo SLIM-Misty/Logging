@@ -18,6 +18,7 @@ function LightSocket(ip, OnOpenCallback = null, OnCloseCallback = null, OnErrorC
 
 	var ipAddress = (ip === null ? "localhost" : ip);
 	var eventListeners = new Map();
+	var websocket = null;
 
 	this.Subscribe = function (eventName, msgType, debounceMs, property, inequality, value, returnProperty, eventCallback) {
 		eventName = eventName ? eventName : msgType;
