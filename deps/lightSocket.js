@@ -123,3 +123,5 @@ function LightSocket(ip, OnOpenCallback = null, OnCloseCallback = null, OnErrorC
 		websocket.close();
 	};
 }
+
+export default LightSocket
