@@ -20,14 +20,42 @@
         >
           <v-list-item two-line v-for="event in events" :key="event.timestamp" @click="selectedEvent = event">
             <v-list-item-content>
-              <v-list-item-title>{{event.type}}</v-list-item-title>
+              <v-list-item-title>{{event.eventName}}</v-list-item-title>
               <v-list-item-subtitle>{{event.timestamp}}</v-list-item-subtitle>
             </v-list-item-content>
           </v-list-item>
         </v-card>
       </v-flex>
       <v-flex v-if="selectedEvent" xs8 style="margin-top:50px">
-        {{selectedEvent}}
+        <!-- {{selectedEvent}} -->
+        <v-list disabled>
+          <v-list-item-group color="primary">
+            <v-list-item>
+              <v-list-item-icon>
+                <v-icon>mdi-clock</v-icon>
+              </v-list-item-icon>
+              <v-list-item-content>
+                <v-list-item-title v-text="selectedEvent.timestamp"></v-list-item-title>
+              </v-list-item-content>
+            </v-list-item>
+            <v-list-item>
+              <v-list-item-icon>
+                <v-icon>mdi-tag</v-icon>
+              </v-list-item-icon>
+              <v-list-item-content>
+                <v-list-item-title v-text="selectedEvent.eventName"></v-list-item-title>
+              </v-list-item-content>
+            </v-list-item>
+            <v-list-item>
+              <v-list-item-icon>
+                <v-icon>mdi-message</v-icon>
+              </v-list-item-icon>
+              <v-list-item-content>
+                <v-list-item-title v-text="JSON.stringify(selectedEvent.message)"></v-list-item-title>
+              </v-list-item-content>
+            </v-list-item>
+          </v-list-item-group>
+        </v-list>
       </v-flex>
       <v-snackbar
         v-model="showingSnackbar"
@@ -40,21 +68,22 @@
 
 <script>
 import LightSocket from "../../public/deps/lightSocket";
+import moment from "moment";
 
 export default {
   data: () => ({
-    events: [{ timestamp: "10:10am", type: "TimeOfFlight" }],
+    events: [],
     botIp: "",
     socket: null,
     headers: [
       { text: "Time Stamp", value: "timestamp" },
-      { text: "Message Type", value: "type" }
+      { text: "Event Name", value: "eventName" }
     ],
     logEnable: {
       timeOfFlight: true,
       haltCommand: true,
       faceRecognition: true,
-      haltCommand: true
+      locomotionCommand: true
     },
     selectedEvent: null,
     connectionSuccess: false,
@@ -64,14 +93,14 @@ export default {
   }),
   mounted () {
     // let addEvent = () => {
-    //   this.events.unshift({ timestamp: "10:10am", type: "TimeOfFlight" });
+    //   this.events.unshift({ timestamp: this.formatDate(moment().toISOString()), eventName: "TimeOfFlight", message: {bloo: 'blah'} });
     //   setTimeout(addEvent, 500);
     // }
     // addEvent()
   },
   methods: {
     selectEvent(event) {
-      this.selectedEvent = JSON.stringify(selectedEvent);
+      this.selectedEvent = selectedEvent;
     },
     connect() {
       if (!this.botIp) {
@@ -100,7 +129,7 @@ export default {
     websocketSubscribe(customEventName, eventType, callback) {
       this.socket.Subscribe(
         customEventName,
-        eventType,
+        eventType,  
         null,
         null,
         null,
@@ -115,72 +144,24 @@ export default {
       this.connectionInProgress = false;
       this.connectionSuccess = true;
 
-      this.websocketSubscribe("TimeOfFlight", "TimeOfFlight", this.timeOfFlight);
-      this.websocketSubscribe("FaceRecognition", "FaceRecognition", this.faceRecognition);
-      this.websocketSubscribe("LocomotionCommand", "LocomotionCommand", this.locomotionCommand);
-      this.websocketSubscribe("HaltCommand", "HaltCommand", this.haltCommand);
+      this.websocketSubscribe("TimeOfFlight", "TimeOfFlight", this.logEvent);
+      this.websocketSubscribe("FaceRecognition", "FaceRecognition", this.logEvent);
+      this.websocketSubscribe("LocomotionCommand", "LocomotionCommand", this.logEvent);
+      this.websocketSubscribe("HaltCommand", "HaltCommand", this.logEvent);
     },
-    websocketEvent(data) {
+    formatDate(dateString) {
+      return moment(dateString).format("HH:MM:SS:ss MM/DD");
+    },
+    logEvent(data) {
+      const timestamp = this.formatDate(data.message.created)
       try {
         console.log(data);
-        this.events.unshift(data);
+        this.events.unshift({ timestamp, eventName: data.eventName, message: data.message});
       } catch (e) {
+        this.events.unshift({ timestamp, eventName: "Error", message: e });
         console.log(e);
       }
-    },
-    timeOfFlight(data) {
-      try {
-        if (this.logEnable.timeOfFlight) {
-          console.log(data);
-          this.events.unshift(data);
-        }
-      } catch (e) {
-        console.log(e);
-      }
-    },
-    faceRecognition(data) {
-      try {
-        if (this.logEnable.faceRecognition) {
-          console.log(data);
-          this.events.unshift(data);
-        }
-      } catch (e) {
-        console.log(e);
-      }
-    },
-    locomotionCommand(data) {
-      //   LocomotionCommand{
-      //     "EventName":"LocomotionCommand",
-      //     "Message":{
-      //         "ActionId":0,
-      //         "AngularVelocity":0,
-      //         "Created":"2018-04-02T22:59:39.3350238Z",
-      //         "LinearVelocity":0.30000000000000004,
-      //         "UsePid":true,
-      //         "UseTrapezoidalDrive":true,
-      //         "ValueIndex":0
-      //     },
-      //     "Type":"LocomotionCommand"
-      // }
-      try {
-        if (this.logEnable.locomotionCommand) {
-          console.log(data);
-          this.events.unshift(data);
-        }
-      } catch (e) {
-        console.log(e);
-      }
-    },
-    haltCommand(data) {
-      try {
-        if (this.logEnable.haltCommand) {
-          console.log(data);
-        }
-      } catch (e) {
-        console.log(e);
-      }
-    },
-    selectEvent(event) {}
+    }
   }
 };
 </script>
