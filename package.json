@@ -9,6 +9,7 @@
     "test:e2e": "vue-cli-service test:e2e",
     "test:unit": "vue-cli-service test:unit"
   },
+  "start": "vue-cli-service build; vue-cli-service serve",
   "dependencies": {
     "core-js": "^2.6.5",
     "moment": "^2.24.0",
