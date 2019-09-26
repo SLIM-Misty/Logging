@@ -121,11 +121,18 @@ export default {
     snackbarText: ""
   }),
   mounted () {
+    // Use this to test the logger without needing to 
+    // connect to Misty
     // let addEvent = () => {
-    //   this.events.unshift({ timestamp: this.formatDate(moment().toISOString()), eventName: "event", message: {bloo: 'blah'} });
+    //   const mockEvent = {
+    //     timestamp: this.formatDate(moment().toISOString()),
+    //     eventName: "event", 
+    //     message: this.flattenObject({bloo: 'blah', da: { fuq: 'brah'}})
+    //   };
+    //   this.events.unshift(mockEvent);
     //   setTimeout(addEvent, 500);
     // }
-    // addEvent()
+    // addEvent();
   },
   methods: {
     selectEvent(event) {
@@ -187,9 +194,9 @@ export default {
       this.connectionSuccess = true;
 
       // this.websocketSubscribe("TimeOfFlight", "TimeOfFlight", this.logEvent);
-      this.websocketSubscribe("FaceRecognition", "FaceRecognition", this.logEvent);
-      this.websocketSubscribe("LocomotionCommand", "LocomotionCommand", this.logEvent);
-      this.websocketSubscribe("HaltCommand", "HaltCommand", this.logEvent);
+      this.websocketSubscribe("FaceRecognitionData", "FaceRecognition", this.logEvent);
+      this.websocketSubscribe("LocomotionCommandData", "LocomotionCommand", this.logEvent);
+      this.websocketSubscribe("HaltCommandData", "HaltCommand", this.logEvent);
     },
     formatDate(dateString) {
       return moment(dateString).format("HH:MM:SS:ss MM/DD");
@@ -198,9 +205,21 @@ export default {
       const timestamp = this.formatDate(data.message.created)
       try {
         console.log(data);
-        this.events.unshift({ timestamp, eventName: data.eventName, message: data.message, id: uuid()});
+        const event = { 
+          timestamp,
+          eventName: data.eventName,
+          message: this.flattenObject(data.message),
+          id: uuid()
+        };
+        this.events.unshift(event);
       } catch (e) {
-        this.events.unshift({ timestamp, eventName: "Error", message: e, id: uuid() });
+        const event = {
+          timestamp, 
+          eventName: "Error",
+          message: e,
+          id: uuid()
+        }
+        this.events.unshift(this.flattenObject(event));
         console.log(e);
       }
     },
@@ -221,6 +240,19 @@ export default {
               window.URL.revokeObjectURL(url);  
           }, 0); 
       }
+    },
+    flattenObject(obj) {
+      const flattened = {}
+
+      Object.keys(obj).forEach((key) => {
+        if (typeof obj[key] === 'object' && obj[key] !== null) {
+          Object.assign(flattened, this.flattenObject(obj[key]))
+        } else {
+          flattened[key] = obj[key]
+        }
+      })
+
+      return flattened
     }
   }
 };
