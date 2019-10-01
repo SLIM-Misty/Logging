@@ -7,8 +7,27 @@
           dark
           color="blue"
           @click="connect()"
+          v-if="!connectionSuccess"
           :loading="connectionInProgress"
         >Connect</v-btn>
+        <v-btn
+          dark
+          color="blue"
+          @click="disconnect()"
+          v-if="connectionSuccess"
+        >Disconnect</v-btn>
+      </v-flex>
+      <v-flex xs8>
+        <v-btn
+          dark
+          color="blue"
+          @click="saveLog()"
+        >Save Log</v-btn>
+        <v-btn
+          dark
+          color="blue"
+          @click="events = []"
+        >Clear Log</v-btn>
       </v-flex>
     </v-layout>
     <v-layout wrap>
@@ -18,7 +37,7 @@
           max-width="400"
           tile
         >
-          <v-list-item two-line v-for="event in events" :key="event.timestamp" @click="selectedEvent = event">
+          <v-list-item two-line v-for="event in events" :key="event.id" @click="selectedEvent = event">
             <v-list-item-content>
               <v-list-item-title>{{event.eventName}}</v-list-item-title>
               <v-list-item-subtitle>{{event.timestamp}}</v-list-item-subtitle>
@@ -50,8 +69,16 @@
               <v-list-item-icon>
                 <v-icon>mdi-message</v-icon>
               </v-list-item-icon>
-              <v-list-item-content>
-                <v-list-item-title v-text="JSON.stringify(selectedEvent.message)"></v-list-item-title>
+              <v-list-item-content v-if="typeof selectedEvent.message === 'Object'">
+                <v-list-item-title 
+                  v-for="key in Object.keys(selectedEvent.message)" :key="key">
+                  {{key}}: {{selectedEvent.message[key]}}
+                </v-list-item-title>
+              </v-list-item-content>
+              <v-list-item-content v-else>
+                <v-list-item-title>
+                  {{selectedEvent.message}}
+                </v-list-item-title>
               </v-list-item-content>
             </v-list-item>
           </v-list-item-group>
@@ -69,6 +96,8 @@
 <script>
 import LightSocket from "../../public/deps/lightSocket";
 import moment from "moment";
+import uuid from "uuid/v4";
+import papa from "papaparse";
 
 export default {
   data: () => ({
@@ -92,11 +121,18 @@ export default {
     snackbarText: ""
   }),
   mounted () {
+    // Use this to test the logger without needing to 
+    // connect to Misty
     // let addEvent = () => {
-    //   this.events.unshift({ timestamp: this.formatDate(moment().toISOString()), eventName: "TimeOfFlight", message: {bloo: 'blah'} });
+    //   const mockEvent = {
+    //     timestamp: this.formatDate(moment().toISOString()),
+    //     eventName: "event", 
+    //     message: this.flattenObject({bloo: 'blah', da: { fuq: 'brah'}})
+    //   };
+    //   this.events.unshift(mockEvent);
     //   setTimeout(addEvent, 500);
     // }
-    // addEvent()
+    // addEvent();
   },
   methods: {
     selectEvent(event) {
@@ -111,6 +147,17 @@ export default {
       this.socket = new LightSocket(this.botIp, this.openCallback, this.closeCallback, this.errorCallback);
       this.socket.Connect();
     },
+    disconnect() {
+      this.socket.Disconnect();
+      this.showSnackbarMessage('Disconnected from ip ' + this.botIp);
+      this.connectionSuccess = false;
+    },
+    saveLog() {
+      let formattedEvents = this.events.slice(0);
+      formattedEvents.forEach(e => e.message = JSON.stringify(e.message));
+      let csv = papa.unparse(JSON.stringify(formattedEvents));
+      this.saveFile(csv);
+    },
     showSnackbarMessage(message) {
       this.snackbarText = message;
       this.showingSnackbar = true;
@@ -118,11 +165,13 @@ export default {
     },
     closeCallback(msg) {
       this.connectionInProgress = false;
+      this.connectionSuccess = false;
       this.showSnackbarMessage(`Connection to ip ${this.botIp} closed. Check the console for more info.`)
       console.log(msg);
     },
     errorCallback(err) {
       this.connectionInProgress = false;
+      this.connectionSuccess = false;
       this.showSnackbarMessage(`Connection to ip ${this.botIp} failed. Check the console for more info.`);
       console.log(err);
     },
@@ -144,10 +193,10 @@ export default {
       this.connectionInProgress = false;
       this.connectionSuccess = true;
 
-      this.websocketSubscribe("TimeOfFlight", "TimeOfFlight", this.logEvent);
-      this.websocketSubscribe("FaceRecognition", "FaceRecognition", this.logEvent);
-      this.websocketSubscribe("LocomotionCommand", "LocomotionCommand", this.logEvent);
-      this.websocketSubscribe("HaltCommand", "HaltCommand", this.logEvent);
+      // this.websocketSubscribe("TimeOfFlight", "TimeOfFlight", this.logEvent);
+      this.websocketSubscribe("FaceRecognitionData", "FaceRecognition", this.logEvent);
+      this.websocketSubscribe("LocomotionCommandData", "LocomotionCommand", this.logEvent);
+      this.websocketSubscribe("HaltCommandData", "HaltCommand", this.logEvent);
     },
     formatDate(dateString) {
       return moment(dateString).format("HH:MM:SS:ss MM/DD");
@@ -156,11 +205,54 @@ export default {
       const timestamp = this.formatDate(data.message.created)
       try {
         console.log(data);
-        this.events.unshift({ timestamp, eventName: data.eventName, message: data.message});
+        const event = { 
+          timestamp,
+          eventName: data.eventName,
+          message: this.flattenObject(data.message),
+          id: uuid()
+        };
+        this.events.unshift(event);
       } catch (e) {
-        this.events.unshift({ timestamp, eventName: "Error", message: e });
+        const event = {
+          timestamp, 
+          eventName: "Error",
+          message: e,
+          id: uuid()
+        }
+        this.events.unshift(this.flattenObject(event));
         console.log(e);
       }
+    },
+    saveFile(data) {
+      let filename = "misty_log_" + moment().format("HH:MM:SS MM/DD/YYYY") + ".csv";
+      var file = new Blob([data], {type: 'text/csv'});
+      if (window.navigator.msSaveOrOpenBlob) // IE10+
+          window.navigator.msSaveOrOpenBlob(file, filename);
+      else { // Others
+          var a = document.createElement("a"),
+                  url = URL.createObjectURL(file);
+          a.href = url;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(function() {
+              document.body.removeChild(a);
+              window.URL.revokeObjectURL(url);  
+          }, 0); 
+      }
+    },
+    flattenObject(obj) {
+      const flattened = {}
+
+      Object.keys(obj).forEach((key) => {
+        if (typeof obj[key] === 'object' && obj[key] !== null) {
+          Object.assign(flattened, this.flattenObject(obj[key]))
+        } else {
+          flattened[key] = obj[key]
+        }
+      })
+
+      return flattened
     }
   }
 };
