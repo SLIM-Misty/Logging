@@ -11,7 +11,11 @@
   },
   "start": "vue-cli-service build; vue-cli-service serve",
   "dependencies": {
+    "body-parser": "^1.19.0",
+    "compression": "^1.7.4",
     "core-js": "^2.6.5",
+    "express": "^4.17.1",
+    "method-override": "^3.0.0",
     "moment": "^2.24.0",
     "papaparse": "^5.1.0",
     "uuid": "^3.3.3",
