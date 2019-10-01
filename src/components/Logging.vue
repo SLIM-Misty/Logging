@@ -27,7 +27,7 @@
             <v-btn dark color="blue" @click="viewLog()">View Log</v-btn>
           </div>
           <div style="margin-top:5px">
-            <h1 v-if="connectionSuccess">{{eventCount}} Events Logged!</h1>
+            <h1>{{eventCount}} Events Logged</h1>
           </div>
           <br />
         </v-flex>
@@ -49,13 +49,7 @@ import uuid from "uuid/v4";
 import papa from "papaparse";
 import ViewLog from "./ViewLog";
 
-let events = [
-  {
-    timestamp: moment().toISOString(),
-    eventName: "event",
-    message: {bloo: 'blah', ayy: { lmao: 'sup'}}
-  }
-];
+let events = [];
 export default {
   components: {
     "view-log": ViewLog
@@ -64,7 +58,7 @@ export default {
     events: [],
     showingViewLog: false,
     eventCount: 0,
-    botIp: "",
+    botIp: "10.10.0.7",
     socket: null,
     headers: [
       { text: "Time Stamp", value: "timestamp" },
@@ -149,9 +143,12 @@ export default {
       this.connectionInProgress = false;
       this.connectionSuccess = true;
 
-      Object.keys(allWebsocketEvents).forEach(event => {
+      Object.keys(this.allWebsocketEvents).forEach(event => {
         if (this.allWebsocketEvents[event]) {
-          this.websocketSubscribe(event + uuid(), event, this.logEvent);
+          // each event name is assigned a uuid so there are no collisions
+          // TODO find a better way to avoid websocket collisions. Maybe
+          // we need to tear down the websocket connections on disconnect? 
+          this.websocketSubscribe(event + "-" + uuid(), event, this.logEvent);
         }
       });
     },
