@@ -58,7 +58,7 @@ export default {
     events: [],
     showingViewLog: false,
     eventCount: 0,
-    botIp: "",
+    botIp: "10.10.0.7",
     socket: null,
     headers: [
       { text: "Time Stamp", value: "timestamp" },
