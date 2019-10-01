@@ -43,11 +43,12 @@
 </template>
 
 <script>
+// LightSocket is a websocket wrapper provided by the misty developers
 import LightSocket from "../../public/deps/lightSocket";
 import moment from "moment";
 import uuid from "uuid/v4";
 import papa from "papaparse";
-import ViewLog from "./ViewLog";
+import ViewLog from "@/components/ViewLog";
 
 let events = [];
 export default {

@@ -2,6 +2,7 @@
     <v-container>
         <v-layout wrap>
             <v-flex xs4>
+                <v-text-field label="Bot IP" v-model="botIp" />
                 <v-btn :loading="loadingPicture" @click="takePicture()">Take Picture!</v-btn>
             </v-flex>
             <v-flex xs8>
@@ -19,6 +20,7 @@ import fs from 'fs'
 export default {
     data() {
         return {
+            botIp: "10.10.0.7",
             imageSource: "",
             loadingPicture: false
         }
@@ -27,7 +29,7 @@ export default {
         takePicture () {
             this.loadingPicture = true;
             Promise.race([
-            fetch(`http://10.10.0.7/api/cameras/rgb?base64=true&fileName=asdf&width=500&height=500&displayOnScreen=true&overwriteExisting=false`, {
+            fetch(`http://${this.botIp}/api/cameras/rgb?base64=true&fileName=asdf&width=500&height=500&displayOnScreen=true&overwriteExisting=false`, {
                 method: 'GET'
             }),
             new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000))

@@ -1,7 +1,15 @@
 <template>
-    <div>
-        <v-btn @click="redLED()">Start Routine</v-btn>
-    </div>
+    <v-container>
+        <v-layout wrap>
+            <v-flex xs4>
+                <v-text-field label="Bot IP" v-model="botIp" />
+                <v-btn @click="redLED()">Start Routine</v-btn>
+            </v-flex>
+            <v-flex xs8>
+                <img :src="imageSource" />
+            </v-flex>
+        </v-layout>
+    </v-container>
 </template>
 
 <script>
@@ -142,21 +150,6 @@ export default {
             .then(jsonData => console.log(jsonData))
         }
     },
-    mounted() {
-        // Promise.race([
-        //     fetch(`http://10.10.0.7/api/cameras/rgb?base64=true&fileName=asdf&width=500&height=500&displayOnScreen=true&overwriteExisting=false`, {
-        //         method: 'GET'
-        //     }),
-        //     new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000))
-        // ])
-        // .then(response => response.json())
-        // .then(jsonData => {
-        //     console.log(jsonData);
-        //     console.log(jsonData.result.base64);
-        //     const path = './images/';
-        //     base64ToImage(jsonData.result.base64, path, {}); 
-        // })
-    }
 
 }
 </script>

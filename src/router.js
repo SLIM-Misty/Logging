@@ -1,6 +1,6 @@
 import Vue from 'vue'
 import Router from 'vue-router'
-import Home from './views/Home.vue'
+import Logging from './views/Logging.vue'
 import TakePicture from './views/TakePicture'
 import Routine from './views/Routine'
 
@@ -12,8 +12,8 @@ export default new Router({
   routes: [
     {
       path: '/',
-      name: 'Home',
-      component: Home
+      name: 'Logging',
+      component: Logging
     },
     {
       path: '/routine',
