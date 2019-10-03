@@ -2,11 +2,16 @@
   <div>
     <v-container v-if="!showingViewLog">
       <v-layout wrap>
-        <v-flex xs4 style="margin-top:25px">
+        <v-flex xs4 style="margin-top:25px; max-height: 100vh">
           <v-btn dark color="blue" @click="enableAllEvents()">Enable All</v-btn>
           <v-btn dark color="gray" @click="disableAllEvents()">Disable All</v-btn>
           <div v-for="event in Object.keys(allWebsocketEvents)" :key="event">
-            <v-switch v-model="allWebsocketEvents[event]" :label="event"></v-switch>
+            <v-tooltip bottom>
+              <template v-slot:activator="{ on }">
+                <v-switch v-on="on" v-model="allWebsocketEvents[event]" :label="event"></v-switch>
+              </template>
+              <span>{{tooltips[event]}}</span>
+            </v-tooltip>
           </div>
         </v-flex>
         <v-flex xs8 style="margin-top:25px">
@@ -49,6 +54,7 @@ import moment from "moment";
 import uuid from "uuid/v4";
 import papa from "papaparse";
 import ViewLog from "@/components/ViewLog";
+import tooltips from "@/components/tooltips"
 
 let events = [];
 export default {
@@ -65,6 +71,7 @@ export default {
       { text: "Time Stamp", value: "timestamp" },
       { text: "Event Name", value: "eventName" }
     ],
+    tooltips,
     allWebsocketEvents: {
       ActuatorPosition: false,
       AudioPlayComplete: false,
