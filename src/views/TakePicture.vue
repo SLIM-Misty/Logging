@@ -3,17 +3,23 @@
         <v-layout wrap>
             <v-flex xs4>
                 <v-text-field label="Bot IP" v-model="botIp" />
-                <v-btn :loading="loadingPicture" @click="start()">Start Recording</v-btn>
-                <v-btn v-if="!stopped" @click="stop()">Stop</v-btn>
+                <v-btn v-if="stopped" @click="start()">Start Recording</v-btn>
+                <v-btn v-else @click="stop()">Stop</v-btn>
                 <v-btn v-if="images.length > 0" @click="saveImages()">Download Images</v-btn>
             </v-flex>
             <v-flex xs8>
-                <img :src="selectedImage || images[0] && images[0].withHeader" />
+                <img :src="selectedImage.withHeader || images[0] && images[0].withHeader" />
             </v-flex>
         </v-layout>
         <v-layout wrap>
-            <v-flex xs1 v-for="i in images" :key="i">
-                <img :src="i.withHeader" height="50px" width="50px" @click="selectedImage = i.withHeader"/>
+            <v-flex xs1 v-for="i in images" :key="i.id">
+                <img 
+                    :src="i.withHeader"
+                    height="50px"
+                    width="50px"
+                    @click="selectedImage = i"
+                    :style="{cursor: 'pointer', border: selectedImage.id == i.id ? '2px solid red':'none'}"
+                />
             </v-flex>
         </v-layout>
     </v-container>
@@ -52,7 +58,7 @@ export default {
             botIp: "10.10.0.7",
             loadingPicture: false,
             images: [],
-            stopped: false,
+            stopped: true,
             selectedImage: ""
         }
     },
@@ -63,29 +69,33 @@ export default {
         },
         stop() {
             this.stopped = true;
+            this.loadingPicture = false;
         },
         takePictures () {
-            this.loadingPicture = true;
             Promise.race([
-            fetch(`http://${this.botIp}/api/cameras/rgb?base64=true&fileName=asdf&width=500&height=500&displayOnScreen=true&overwriteExisting=false`, {
-                method: 'GET'
-            }),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000))
-        ])
-        .then(response => response.json())
-        .then(jsonData => {
-            console.log(jsonData);
-            // the base64toBlob helper expects an encoding without the header
-            // so we just store both so they can be easily displayed
-            // and saved as well
-            const withoutHeader = jsonData.result.base64;
-            const withHeader = 'data:image/png;base64,' + jsonData.result.base64;
-            this.images.push({withoutHeader, withHeader});
-            this.loadingPicture = false;
-            if (!this.stopped) {
-                setTimeout(this.takePictures, 1000);
-            }
-        })
+                fetch(`http://${this.botIp}/api/cameras/rgb?base64=true&fileName=asdf&width=500&height=500&displayOnScreen=true&overwriteExisting=false`, {
+                    method: 'GET'
+                }),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000))
+            ])
+            .then(response => response.json())
+            .then(jsonData => {
+                console.log(jsonData);
+                // the base64toBlob helper expects an encoding without the header
+                // so we just store both so they can be easily displayed
+                // and saved as well
+                const withoutHeader = jsonData.result.base64;
+                const withHeader = 'data:image/png;base64,' + jsonData.result.base64;
+                this.images.unshift({withoutHeader, withHeader, id: uuid()});
+                this.loadingPicture = false;
+                if (!this.stopped) {
+                    setTimeout(this.takePictures, 1000);
+                }
+            })
+            .catch(err => {
+                console.log(err);
+                this.stopped = true;
+            })
         },
         saveImages () {
             this.images.forEach((image, index) => {

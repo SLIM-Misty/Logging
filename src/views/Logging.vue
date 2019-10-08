@@ -107,17 +107,17 @@ export default {
   mounted() {
     // Use this to test the logger without needing to
     // connect to Misty
-    let addEvent = () => {
-      const mockEvent = {
-        timestamp: this.formatDate(moment().toISOString()),
-        eventName: "event",
-        message: {bloo: 'blah', ayy: { lmao: 'sup'}}
-      };
-      this.eventCount++;
-      this.events.unshift(mockEvent);
-      setTimeout(addEvent, 100);
-    }
-    addEvent();
+    // let addEvent = () => {
+    //   const mockEvent = {
+    //     timestamp: this.formatDate(moment().toISOString()),
+    //     eventName: "event",
+    //     message: {bloo: 'blah', ayy: { lmao: 'sup'}}
+    //   };
+    //   this.eventCount++;
+    //   this.events.unshift(mockEvent);
+    //   setTimeout(addEvent, 100);
+    // }
+    // addEvent();
   },
   methods: {
     selectEvent(event) {
