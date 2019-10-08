@@ -22,7 +22,8 @@
             <v-btn dark color="orange" @click="disconnect()" v-if="connectionSuccess">Disconnect</v-btn>
           </div>
           <div style="margin-top:5px">
-            <v-btn color="yellow" @click="saveLog()">Save Log</v-btn>
+            <v-btn color="orange" @click="saveCSVLog()">Save CSV Log</v-btn>
+            <v-btn color="yellow" @click="saveJSONLog()">Save JSON Log</v-btn>
             <v-btn dark color="green" @click="clearLog()">Clear Log</v-btn>
             <v-btn dark color="blue" @click="viewLog()">View Log</v-btn>
           </div>
@@ -99,16 +100,17 @@ export default {
   mounted() {
     // Use this to test the logger without needing to
     // connect to Misty
-    // let addEvent = () => {
-    //   const mockEvent = {
-    //     timestamp: this.formatDate(moment().toISOString()),
-    //     eventName: "event",
-    //     message: this.flattenObject({bloo: 'blah', ayy: { lmao: 'sup'}})
-    //   };
-    //   events.unshift(mockEvent);
-    //   setTimeout(addEvent, 500);
-    // }
-    // addEvent();
+    let addEvent = () => {
+      const mockEvent = {
+        timestamp: this.formatDate(moment().toISOString()),
+        eventName: "event",
+        message: {bloo: 'blah', ayy: { lmao: 'sup'}}
+      };
+      this.eventCount++;
+      this.events.unshift(mockEvent);
+      setTimeout(addEvent, 100);
+    }
+    addEvent();
   },
   methods: {
     selectEvent(event) {
@@ -192,7 +194,7 @@ export default {
         const event = {
           timestamp,
           eventName: data.eventName,
-          message: this.flattenObject(data.message),
+          message: data.message,
           id: uuid()
         };
         events.unshift(event);
@@ -203,15 +205,19 @@ export default {
           message: e,
           id: uuid()
         };
-        events.unshift(this.flattenObject(event));
+        events.unshift(event);
         console.log(e);
       }
     },
-    saveLog() {
-      let formattedEvents = events.slice(0);
-      formattedEvents.forEach(e => (e.message = JSON.stringify(e.message)));
+    saveCSVLog() {
+      let formattedEvents = this.events.slice(0);
+      formattedEvents.forEach(e => (e.message = JSON.stringify(this.flattenObject(e.message))));
       let csv = papa.unparse(JSON.stringify(formattedEvents));
-      this.saveFile(csv);
+      this.saveFile(csv, ".csv");
+    },
+    saveJSONLog() {
+      const json = JSON.stringify(this.events.slice(0), 0, 4);
+      this.saveFile(json, ".json");
     },
     clearLog() {
       this.eventCount = 0;
@@ -221,9 +227,9 @@ export default {
       this.showingViewLog = true;
       this.events = events;
     },
-    saveFile(data) {
+    saveFile(data, fileExtension) {
       let filename =
-        "misty_log_" + moment().format("HH:MM:SS MM/DD/YYYY") + ".csv";
+        "misty_log_" + moment().format("HH:MM:SS MM/DD/YYYY") + fileExtension;
       var file = new Blob([data], { type: "text/csv" });
       if (window.navigator.msSaveOrOpenBlob)
         // IE10+
