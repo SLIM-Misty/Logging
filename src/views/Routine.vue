@@ -124,7 +124,7 @@ export default {
         },
         moveArmsAgain () {
             Promise.race([
-                fetch('http://10.10.0.7/api/arms/set', {
+                fetch(`http://${this.botIp}/api/arms/set`, {
                     method: 'POST',
                     body: '{ "leftArmPosition":-30,"rightArmPosition":30,"leftArmVelocity":null,"rightArmVelocity":null,"duration":20,"units":"" }'
                 }),
@@ -138,7 +138,7 @@ export default {
         },
         moveArmsAgainAgain() {
             Promise.race([
-                fetch('http://10.10.0.7/api/arms/set', {
+                fetch(`http://${this.botIp}/api/arms/set`, {
                     method: 'POST',
                     body: '{ "leftArmPosition":30,"rightArmPosition":-30,"leftArmVelocity":null,"rightArmVelocity":null,"duration":20,"units":"" }'
                 }),
