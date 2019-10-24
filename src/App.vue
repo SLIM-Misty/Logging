@@ -6,6 +6,7 @@
         <router-link to="/" style="margin-left:15px">Logging</router-link>
         <router-link to="routine" style="margin-left:15px">Routine</router-link>
         <router-link to="takepicture" style="margin-left:15px">Pictures</router-link>
+        <router-link to="takedepthpicture" style="margin-left:15px">Depth Picture</router-link>
       </v-toolbar-title>
     </v-app-bar>
 

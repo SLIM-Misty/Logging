@@ -105,7 +105,6 @@ export default {
     snackbarText: ""
   }),
   mounted() {
-    this.setupWebsockets();
     // Use this to test the logger without needing to
     // connect to Misty
     // let addEvent = () => {
