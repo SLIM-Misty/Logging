@@ -3,11 +3,12 @@
         <v-layout wrap>
             <v-flex xs12 v-if="connectionEstablished" style="margin-bottom:15px">
                 <v-text-field label="Bot IP" v-model="botIp" />
-                <v-btn v-if="stopped" @click="start()">Start</v-btn>
-                <v-btn v-else @click="stop()">Stop</v-btn>
-                <v-btn @click="startSlamStreaming()">Take Fisheye Picture</v-btn>
-                <v-btn @click="takeDepthPicture()">Take Depth Picture</v-btn>
-                <v-btn @click="stopSlamStreaming()">Kill SLAM Sensor</v-btn>
+                <v-btn v-if="stopped" @click="start()">RGB Start</v-btn>
+                <v-btn v-else @click="stop()">RGB Stop</v-btn>
+                <v-btn @click="test()">Test</v-btn>
+                <v-btn @click="startSlamStreaming()">Start SLAM</v-btn>
+                <v-btn @click="takeFisheyePicture()">Depth Start</v-btn>
+                <v-btn @click="stopSlamStreaming()">Stop SLAM</v-btn>
                 <v-btn v-if="images.length > 0" @click="saveImages()">Download Images</v-btn>
             </v-flex>
             <v-flex xs6 style='min-height:500px;min-width:500px'>
@@ -22,6 +23,7 @@
             </v-flex>
             <v-flex xs6 >
                 <v-layout wrap>
+                    <!-- raw rgb or fisheye images from misty -->
                     <v-flex xs1 v-for="(i, index) in images" :key="i.id">
                         <img 
                             :src="i.withHeader"
@@ -38,6 +40,7 @@
             </v-flex>
             <v-flex xs6 >
                 <v-layout wrap>
+                    <!-- images with detection boxes returned from object detection script -->
                     <v-flex xs1 v-for="(i, index) in processedImages" :key="i.id">
                         <img 
                             :src="i.withHeader"
@@ -107,17 +110,43 @@ export default {
             this.socket.addEventListener('message', (event) => {
                 console.log('recieved message');
                 console.log(event);
-                const withoutHeader = event.data;
-                const withHeader = 'data:image/png;base64,' + event.data;
-                this.processedImages.unshift({withoutHeader, withHeader, id: uuid()})
+                const eventData = JSON.parse(event.data);
+                const withoutHeader = eventData.processed_image;
+                const withHeader = 'data:image/png;base64,' + eventData.processed_image;
+                this.processedImages.unshift({withoutHeader, withHeader, id: uuid()});
+                if (eventData.turn_direction != "none") {
+                    this.turn(eventData.turn_direction || "none");
+                }
             });
 
             this.socket.addEventListener('open', (event) => {
                 console.log('websocket connection established');
                 console.log(event);
                 this.connectionEstablished = true;
-                // this.test();
             });
+        },
+        turn(direction) {
+            const options = {
+                timeMs: 500,
+                // angularVelocity ranges from -100 to 100
+                // -100 is clockwise rotation
+                angularVelocity: direction == "left" ? 90 : -90,
+                linearVelocity: 0,
+                degree: 0
+            }
+            //POST http://{ip.address}/api/drive/time
+            Promise.race([
+                fetch(`http://${ip.address}/api/drive/time`, {
+                    method: 'POST',
+                    body: JSON.stringify(options)
+                }),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000))
+            ])
+            .then(response => response.json())
+            .then(jsonData => {
+                console.log("Data from turn() :")
+                console.log(jsonData);
+            })
         },
         startSlamStreaming() {
             Promise.race([
@@ -130,7 +159,6 @@ export default {
             .then(jsonData => {
                 console.log('slam streaming start json data:');
                 console.log(jsonData);
-                this.takeFisheyePicture();
             })
             .catch(err => {
                 console.log(err);
@@ -150,12 +178,39 @@ export default {
                 const withoutHeader = jsonData.result.base64;
                 const withHeader = 'data:image/png;base64,' + jsonData.result.base64;
                 this.images.unshift({withoutHeader, withHeader, id: uuid()});
-                this.socket.send(withoutHeader)
-                this.stopSlamStreaming();
+                this.takeDepthPicture(withoutHeader);
             })
             .catch(err => {
                 console.log(err);
             })
+        },
+        takeDepthPicture(fisheyeImage) {    
+            Promise.race([
+                fetch(`http://${this.botIp}/api/cameras/depth`, {
+                    method: 'GET'
+                }),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000))
+            ])
+            .then(response => response.json())
+            .then(jsonData => {
+                console.log('depth picture json data:');
+                console.log(jsonData);
+                const depthImageData = jsonData.result.image;
+                const message = {
+                    image: fisheyeImage,
+                    image_width: jsonData.result.width,
+                    image_height: jsonData.result.height,
+                    image_depth_data: depthImageData,
+                    is_fisheye_image: true,
+                    get_depth_data: true
+                };
+                console.log('sending socket message !');
+                console.log(message);
+                this.socket.send(JSON.stringify(message));
+            })
+            .catch(err => {
+                console.log(err);
+            });
         },
         stopSlamStreaming() {
             Promise.race([
@@ -173,22 +228,6 @@ export default {
                 console.log(err);
             })
         },
-        takeDepthPicture() {
-            Promise.race([
-                fetch(`http://${this.botIp}/api/cameras/depth`, {
-                    method: 'GET'
-                }),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000))
-            ])
-            .then(response => response.json())
-            .then(jsonData => {
-                console.log('depth picture json data:');
-                console.log(jsonData);
-            })
-            .catch(err => {
-                console.log(err);
-            })
-        },
         test() {
             // use this test when working on the ui so you don't need to connect 
             // to a camera. Each people_pic is a base64 string
@@ -198,7 +237,10 @@ export default {
                     withoutHeader: people_pic, 
                     id: uuid()
                 })
-                this.socket.send(people_pic)
+                const message = {
+                    image_data: people_pic
+                };
+                this.socket.send(JSON.stringify(message));
             });
         },
         async start() {
@@ -225,7 +267,15 @@ export default {
                 const withoutHeader = jsonData.result.base64;
                 const withHeader = 'data:image/png;base64,' + jsonData.result.base64;
                 this.images.unshift({withoutHeader, withHeader, id: uuid()});
-                this.socket.send(withoutHeader)
+                const message = {
+                    image: withoutHeader,
+                    image_width: jsonData.result.width,
+                    image_height: jsonData.result.height,
+                    image_depth_data: null,
+                    is_fisheye: false,
+                    get_depth_data: false
+                };
+                this.socket.send(JSON.stringify(message));
                 this.loadingPicture = false;
                 if (!this.stopped) {
                     setTimeout(this.takePictures, 1000);

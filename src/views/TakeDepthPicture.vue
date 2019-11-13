@@ -6,6 +6,9 @@
                 <v-btn @click="takeDepthPicture()">Take Depth Picture</v-btn>
                 <div>Max Value: {{maxValue}}</div>
                 <div>Min Value: {{minValue}}</div>
+                Paste depth data here and click submit to render it
+                <v-textarea v-model="textareaData" cols="50" rows="300"></v-textarea>
+                <v-btn @click="renderTextareaData()">Submit</v-btn>
             </v-flex>
             <v-flex xs12 >
                 <div id="my_dataviz"></div>
@@ -23,7 +26,11 @@ export default {
         return {
             botIp: "10.10.0.7",
             maxValue: 0,
-            minValue: 0
+            minValue: 0,
+            DEPTH_IMAGE_WIDTH: 320,
+            DEPTH_IMAGE_HEIGHT: 240,
+            GRAPH_SCALE: 3,
+            textAreaData: ""
         }
     },
     methods: {
@@ -38,54 +45,37 @@ export default {
             .then(jsonData => {
                 console.log('depth picture json data:');
                 console.log(jsonData);
-                this.renderGraph(jsonData.result.image);
+                this.parseAndRenderData(jsonData.result.image);
             })
             .catch(err => {
                 console.log(err);
             })
         },
-        renderGraph (rawData) {
-            // set the dimensions margins and scale of the graph
-            const DEPTH_IMAGE_WIDTH = 320;
-            const DEPTH_IMAGE_HEIGHT = 240;
-            const GRAPH_SCALE = 3;
-            const margin = {top: 20, right: 30, bottom: 30, left: 30},
-                width = DEPTH_IMAGE_WIDTH * GRAPH_SCALE - margin.left - margin.right,
-                height = DEPTH_IMAGE_HEIGHT * GRAPH_SCALE - margin.top - margin.bottom;
-
-            // append the svg object to the body of the page
-            var svg = d3.select("#my_dataviz")
-                .append("svg")
-                    .attr("width", width + margin.left + margin.right)
-                    .attr("height", height + margin.top + margin.bottom)
-                .append("g")
-                    .attr("transform",
-                        "translate(" + margin.left + "," + margin.top + ")");
-
-            // read data
-            // var rawData = [];
-            // for (var i=0; i<(DEPTH_IMAGE_WIDTH*DEPTH_IMAGE_HEIGHT); i++) {
-            //     var value = i % 2000;
-            //     rawData.push(value);
-            // }
-            // console.log(rawData);
-            
+        renderTextareaData() {
+            this.renderGraph(JSON.parse(this.textAreaData));
+        },
+        parseAndRenderData(rawData) {
+            this.renderGraph(this.parseRawData(rawData));
+        },
+        parseRawData(rawData) {
             var data = [];
             var rawDataIndex = 0;
             let max = 0;
             let min = Infinity;
-            for (var y=0; y<DEPTH_IMAGE_HEIGHT; y++) {
-                for (var x=DEPTH_IMAGE_WIDTH-1; x>=0; x++) {
+            // The data from the depth sensor appears to be
+            // indexed from the top right
+            for (var y=0; y<this.DEPTH_IMAGE_HEIGHT; y++) {
+                for (var x=0; x<this.DEPTH_IMAGE_WIDTH; x++) {
                     var value = rawData[rawDataIndex] == "NaN" ? 0 : rawData[rawDataIndex];
-                    // 0 values are typically NaN values which are too
-                    // far for the sensor to detect. Don't invert
+                    // convert 'NaN' values which are too
+                    // far (or close?) for the sensor to detect. Don't invert
                     // 0 values so they show up as black on the screen
                     if (value != 0) {
                         // invert the colors so things that are closer
                         // show up brighter
                         value = 10000 - value;
                     }
-                    data.unshift({ x, y, value: 10000 - value });
+                    data.unshift({ x, y, value });
                     rawDataIndex++;
                     if(value > max) {
                         max = value;
@@ -95,8 +85,16 @@ export default {
                     }
                 }
             }
+            console.log(data)
             this.maxValue = max;
             this.minValue = min;
+            return data
+        },
+        renderGraph (data) {
+            // d3.js heatmap https://www.d3-graph-gallery.com/graph/heatmap_basic.html
+            const margin = {top: 20, right: 30, bottom: 30, left: 30},
+                width = this.DEPTH_IMAGE_WIDTH * this.GRAPH_SCALE - margin.left - margin.right,
+                height = this.DEPTH_IMAGE_HEIGHT * this.GRAPH_SCALE - margin.top - margin.bottom;
 
             // append the svg object to the body of the page
             var svg = d3.select("#my_dataviz")
@@ -112,7 +110,7 @@ export default {
 
             // Build X scales and axis:
             var x = d3.scaleBand()
-                .range([ 0, width ])
+                .range([ width, 0 ])
                 .domain(xDomain)
                 .padding(0.05);
 
@@ -127,6 +125,30 @@ export default {
                 .interpolator(d3.interpolateInferno)
                 .domain([0,10000])
 
+            // create a tooltip
+            var tooltip = d3.select("#my_dataviz")
+                .append("div")
+                .style("opacity", 0)
+                .attr("class", "tooltip")
+                .style("background-color", "white")
+                .style("border", "solid")
+                .style("border-width", "2px")
+                .style("border-radius", "5px")
+                .style("padding", "5px")
+
+            // Three function that change the tooltip when user hover / move / leave a cell
+            var mouseover = function(d) {
+                tooltip.style("opacity", 1)
+            }
+            var mousemove = function(d) {
+                tooltip
+                .html("The exact value of<br>this cell is: " + d.value)
+                .style("left", (d3.mouse(this)[0]+70) + "px")
+                .style("top", (d3.mouse(this)[1]) + "px")
+            }
+            var mouseleave = function(d) {
+                tooltip.style("opacity", 0)
+            }
             // add the squares
             svg.selectAll()
                 .data(data, function(d) {return d.x+':'+d.y;})
@@ -142,6 +164,9 @@ export default {
                 .style("stroke-width", 4)
                 .style("stroke", "none")
                 .style("opacity", 0.8)
+                .on("mouseover", mouseover)
+                .on("mousemove", mousemove)
+                .on("mouseleave", mouseleave)
 
             // Add title to graph
             svg.append("text")
