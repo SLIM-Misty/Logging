@@ -111,11 +111,13 @@ export default {
                 console.log('recieved message');
                 console.log(event);
                 const eventData = JSON.parse(event.data);
+                console.log('message event data:');
+                console.log(eventData);
                 const withoutHeader = eventData.processed_image;
                 const withHeader = 'data:image/png;base64,' + eventData.processed_image;
                 this.processedImages.unshift({withoutHeader, withHeader, id: uuid()});
-                if (eventData.turn_direction != "none") {
-                    this.turn(eventData.turn_direction || "none");
+                if (eventData.turn_direction && eventData.turn_direction != "none") {
+                    this.startTurn(eventData.turn_direction);
                 }
             });
 
@@ -125,18 +127,35 @@ export default {
                 this.connectionEstablished = true;
             });
         },
-        turn(direction) {
+        startTurn(direction) {
             const options = {
-                timeMs: 500,
-                // angularVelocity ranges from -100 to 100
-                // -100 is clockwise rotation
                 angularVelocity: direction == "left" ? 90 : -90,
                 linearVelocity: 0,
-                degree: 0
             }
-            //POST http://{ip.address}/api/drive/time
+            //POST http://{ip.address}/api/drive
             Promise.race([
-                fetch(`http://${ip.address}/api/drive/time`, {
+                fetch(`http://${this.botIp}/api/drive`, {
+                    method: 'POST',
+                    body: JSON.stringify(options)
+                }),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000))
+            ])
+            .then(response => response.json())
+            .then(jsonData => {
+                console.log("Data from turn() :")
+                console.log(jsonData);
+                //turn for 1 second
+                setTimeout(this.endTurn, 500);
+            })
+        },
+        endTurn() {
+            const options = {
+                angularVelocity: 0,
+                linearVelocity: 0,
+            }
+            //POST http://{ip.address}/api/drive
+            Promise.race([
+                fetch(`http://${this.botIp}/api/drive`, {
                     method: 'POST',
                     body: JSON.stringify(options)
                 }),
@@ -272,7 +291,7 @@ export default {
                     image_width: jsonData.result.width,
                     image_height: jsonData.result.height,
                     image_depth_data: null,
-                    is_fisheye: false,
+                    is_fisheye_image: false,
                     get_depth_data: false
                 };
                 this.socket.send(JSON.stringify(message));

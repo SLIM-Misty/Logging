@@ -30,7 +30,7 @@ export default {
             DEPTH_IMAGE_WIDTH: 320,
             DEPTH_IMAGE_HEIGHT: 240,
             GRAPH_SCALE: 3,
-            textAreaData: ""
+            textareaData: ""
         }
     },
     methods: {
