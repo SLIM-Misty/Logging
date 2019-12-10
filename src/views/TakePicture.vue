@@ -3,12 +3,27 @@
         <v-layout wrap>
             <v-flex xs12 v-if="connectionEstablished" style="margin-bottom:15px">
                 <v-text-field label="Bot IP" v-model="botIp" />
-                <v-btn v-if="stopped" @click="start()">RGB Start</v-btn>
-                <v-btn v-else @click="stop()">RGB Stop</v-btn>
-                <v-btn @click="test()">Test</v-btn>
-                <v-btn @click="startSlamStreaming()">Start SLAM</v-btn>
-                <v-btn @click="takeFisheyePicture()">Depth Start</v-btn>
-                <v-btn @click="stopSlamStreaming()">Stop SLAM</v-btn>
+                <v-btn @click="startSlamStreaming()" color="blue" outlined>Start SLAM</v-btn>
+                <v-btn @click="stopSlamStreaming()" color="red" outlined>Stop SLAM</v-btn>
+                <br /><br />
+                <v-btn 
+                    v-if="depthStopped" 
+                    @click="depthStopped = false; takeFisheyePicture()"
+                    color="blue" 
+                    outlined>
+                    Depth Start
+                </v-btn>
+                <v-btn v-else @click="depthStopped = true" color="red" outlined>Depth Stop</v-btn>
+                <br /><br />
+                <v-btn 
+                    v-if="rgbStopped" 
+                    @click="rgbStopped = false; takePictures();" 
+                    color="blue" 
+                    outlined>
+                    Face Start
+                </v-btn>
+                <v-btn v-else @click="rgbStopped = true;" color="red" outlined>Face Stop</v-btn>
+                <br /><br />
                 <v-btn v-if="images.length > 0" @click="saveImages()">Download Images</v-btn>
             </v-flex>
             <v-flex xs6 style='min-height:500px;min-width:500px'>
@@ -27,12 +42,12 @@
                     <v-flex xs1 v-for="(i, index) in images" :key="i.id">
                         <img 
                             :src="i.withHeader"
-                            height="50px"
-                            width="50px"
+                            height='50px'
+                            width='50px'
                             @click="selectedImageIndex = index"
                             :style="{
                                 cursor: 'pointer',
-                                border: selectedImageIndex == index ? '2px solid red':'none'
+                                border: selectedImageIndex == index ? '2px solid red' : 'none'
                             }"
                         />
                     </v-flex>
@@ -92,19 +107,26 @@ export default {
     data() {
         return {
             botIp: "10.10.0.7",
-            loadingPicture: false,
             images: [],
             processedImages: [],
-            stopped: true,
+            rgbStopped: true,
             selectedImageIndex: 0,
             socket: new WebSocket('ws://localhost:8765'),
-            connectionEstablished: false
+            faceApiSocket: new WebSocket('ws://localhost:8766'),
+            connectionEstablished: false,
+            depthStopped: true,
         }
     },
     mounted () {
         this.setupWebsockets();
     },
     methods: {
+        testFaceApi() {
+            const message = {
+                image: people_pics[3],
+            };
+            this.faceApiSocket.send(JSON.stringify(message));
+        },
         setupWebsockets() {
             // Listen for incoming base64 ascii data to display
             this.socket.addEventListener('message', (event) => {
@@ -115,9 +137,12 @@ export default {
                 console.log(eventData);
                 const withoutHeader = eventData.processed_image;
                 const withHeader = 'data:image/png;base64,' + eventData.processed_image;
-                this.processedImages.unshift({withoutHeader, withHeader, id: uuid()});
+                this.processedImages.unshift({ withoutHeader, withHeader, id: uuid() });
                 if (eventData.turn_direction && eventData.turn_direction != "none") {
-                    this.startTurn(eventData.turn_direction);
+                    this.startTurn(eventData.turn_direction, eventData.turn_speed);
+                }
+                if (!this.depthStopped) {
+                    this.takeFisheyePicture();
                 }
             });
 
@@ -126,62 +151,45 @@ export default {
                 console.log(event);
                 this.connectionEstablished = true;
             });
+
+            // Listen for incoming data from the face detection api proxy
+            this.faceApiSocket.addEventListener('message', (event) => {
+                console.log('faceApiSocket recieved message');
+                console.log(event);
+                const eventData = JSON.parse(event.data);
+                console.log('message event data:');
+                console.log(eventData);
+                const maxEmotion = eventData.max_emotion;
+                const allEmotionData = eventData.all_emotion_data;
+            });
+
+            this.faceApiSocket.addEventListener('open', (event) => {
+                console.log('faceApiSocket websocket connection established');
+                console.log(event);
+            });
         },
-        startTurn(direction) {
+        startTurn(direction, speed) {
             const options = {
-                angularVelocity: direction == "left" ? 90 : -90,
+                // positive values indicate counter clockwise rotation
+                // negative values indicate clockwise rotation
+                angularVelocity: direction == "left" ? speed : -speed,
                 linearVelocity: 0,
+                timeMS: 1000
             }
-            //POST http://{ip.address}/api/drive
             Promise.race([
-                fetch(`http://${this.botIp}/api/drive`, {
+                fetch(`http://${this.botIp}/api/drive/time`, {
                     method: 'POST',
                     body: JSON.stringify(options)
                 }),
                 new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000))
             ])
-            .then(response => response.json())
+            .then(response => {
+                response.json();
+            })
             .then(jsonData => {
-                console.log("Data from turn() :")
+                console.log("drive time response : ");
                 console.log(jsonData);
-                //turn for 1 second
-                setTimeout(this.endTurn, 500);
-            })
-        },
-        endTurn() {
-            const options = {
-                angularVelocity: 0,
-                linearVelocity: 0,
-            }
-            //POST http://{ip.address}/api/drive
-            Promise.race([
-                fetch(`http://${this.botIp}/api/drive`, {
-                    method: 'POST',
-                    body: JSON.stringify(options)
-                }),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000))
-            ])
-            .then(response => response.json())
-            .then(jsonData => {
-                console.log("Data from turn() :")
-                console.log(jsonData);
-            })
-        },
-        startSlamStreaming() {
-            Promise.race([
-                fetch(`http://${this.botIp}/api/slam/streaming/start`, {
-                    method: 'POST'
-                }),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000))
-            ])
-            .then(response => response.json())
-            .then(jsonData => {
-                console.log('slam streaming start json data:');
-                console.log(jsonData);
-            })
-            .catch(err => {
-                console.log(err);
-            })
+            });
         },
         takeFisheyePicture() {
             Promise.race([
@@ -231,6 +239,22 @@ export default {
                 console.log(err);
             });
         },
+        startSlamStreaming() {
+            Promise.race([
+                fetch(`http://${this.botIp}/api/slam/streaming/start`, {
+                    method: 'POST'
+                }),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000))
+            ])
+            .then(response => response.json())
+            .then(jsonData => {
+                console.log('slam streaming start json data:');
+                console.log(jsonData);
+            })
+            .catch(err => {
+                console.log(err);
+            })
+        },
         stopSlamStreaming() {
             Promise.race([
                 fetch(`http://${this.botIp}/api/slam/streaming/stop`, {
@@ -245,30 +269,7 @@ export default {
             })
             .catch(err => {
                 console.log(err);
-            })
-        },
-        test() {
-            // use this test when working on the ui so you don't need to connect 
-            // to a camera. Each people_pic is a base64 string
-            people_pics.forEach(people_pic => {
-                this.images.push({
-                    withHeader: 'data:image/png;base64,' + people_pic, 
-                    withoutHeader: people_pic, 
-                    id: uuid()
-                })
-                const message = {
-                    image_data: people_pic
-                };
-                this.socket.send(JSON.stringify(message));
             });
-        },
-        async start() {
-            this.stopped = false;
-            this.takePictures();
-        },
-        stop() {
-            this.stopped = true;
-            this.loadingPicture = false;
         },
         takePictures () {
             Promise.race([
@@ -294,15 +295,16 @@ export default {
                     is_fisheye_image: false,
                     get_depth_data: false
                 };
-                this.socket.send(JSON.stringify(message));
-                this.loadingPicture = false;
-                if (!this.stopped) {
-                    setTimeout(this.takePictures, 1000);
+                // this.socket.send(JSON.stringify(message));
+                this.faceApiSocket.send(JSON.stringify(message));
+                if (!this.rgbStopped) {
+                    this.takePictures();
+                    // setTimeout(this.takePictures, 5000);
                 }
             })
             .catch(err => {
                 console.log(err);
-                this.stopped = true;
+                this.rgbStopped = true;
             })
         },
         saveImages () {
