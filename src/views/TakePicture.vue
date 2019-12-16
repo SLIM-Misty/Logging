@@ -2,6 +2,9 @@
     <v-container>
         <v-layout wrap>
             <v-flex xs12 v-if="connectionEstablished" style="margin-bottom:15px">
+                <v-btn @click="testObjectDetectionApi()" color="green" outlined>Test Obj Det</v-btn>
+                <v-btn @click="testFaceApi()" color="green" outlined>Test Face</v-btn>
+
                 <v-text-field label="Bot IP" v-model="botIp" />
                 <v-btn @click="startSlamStreaming()" color="blue" outlined>Start SLAM</v-btn>
                 <v-btn @click="stopSlamStreaming()" color="red" outlined>Stop SLAM</v-btn>
@@ -24,7 +27,7 @@
                 </v-btn>
                 <v-btn v-else @click="rgbStopped = true;" color="red" outlined>Face Stop</v-btn>
                 <br /><br />
-                <v-btn v-if="images.length > 0" @click="saveImages()">Download Images</v-btn>
+                <!-- <v-btn v-if="images.length > 0" @click="saveImages()">Download Images</v-btn> -->
             </v-flex>
             <v-flex xs6 style='min-height:500px;min-width:500px'>
                 <img 
@@ -111,7 +114,8 @@ export default {
             processedImages: [],
             rgbStopped: true,
             selectedImageIndex: 0,
-            socket: new WebSocket('ws://localhost:8765'),
+            // objectDetectionSocket: new WebSocket('ws://localhost:8765'),
+            objectDetectionSocket: new WebSocket('ws://132.178.227.12:80'),
             faceApiSocket: new WebSocket('ws://localhost:8766'),
             connectionEstablished: false,
             depthStopped: true,
@@ -127,9 +131,20 @@ export default {
             };
             this.faceApiSocket.send(JSON.stringify(message));
         },
+        testObjectDetectionApi() {
+            const message = {
+                image: people_pics[3],
+                image_width: null,
+                image_height: null,
+                image_depth_data: null,
+                is_fisheye_image: false,
+                get_depth_data: false
+            };
+            this.objectDetectionSocket.send(JSON.stringify(message));
+        },
         setupWebsockets() {
             // Listen for incoming base64 ascii data to display
-            this.socket.addEventListener('message', (event) => {
+            this.objectDetectionSocket.addEventListener('message', (event) => {
                 console.log('recieved message');
                 console.log(event);
                 const eventData = JSON.parse(event.data);
@@ -146,7 +161,7 @@ export default {
                 }
             });
 
-            this.socket.addEventListener('open', (event) => {
+            this.objectDetectionSocket.addEventListener('open', (event) => {
                 console.log('websocket connection established');
                 console.log(event);
                 this.connectionEstablished = true;
@@ -205,7 +220,17 @@ export default {
                 const withoutHeader = jsonData.result.base64;
                 const withHeader = 'data:image/png;base64,' + jsonData.result.base64;
                 this.images.unshift({withoutHeader, withHeader, id: uuid()});
-                this.takeDepthPicture(withoutHeader);
+                const message = {
+                    image: withoutHeader,
+                    image_width: null,
+                    image_height: null,
+                    image_depth_data: null,
+                    is_fisheye_image: true,
+                    get_depth_data: false
+                };
+                console.log('sending objectDetectionSocket message !');
+                console.log(message);
+                this.objectDetectionSocket.send(JSON.stringify(message));
             })
             .catch(err => {
                 console.log(err);
@@ -231,9 +256,9 @@ export default {
                     is_fisheye_image: true,
                     get_depth_data: true
                 };
-                console.log('sending socket message !');
+                console.log('sending objectDetectionSocket message !');
                 console.log(message);
-                this.socket.send(JSON.stringify(message));
+                this.objectDetectionSocket.send(JSON.stringify(message));
             })
             .catch(err => {
                 console.log(err);
@@ -295,7 +320,7 @@ export default {
                     is_fisheye_image: false,
                     get_depth_data: false
                 };
-                // this.socket.send(JSON.stringify(message));
+                // this.objectDetectionSocket.send(JSON.stringify(message));
                 this.faceApiSocket.send(JSON.stringify(message));
                 if (!this.rgbStopped) {
                     this.takePictures();

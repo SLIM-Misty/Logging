@@ -6,9 +6,9 @@
                 <v-btn @click="takeDepthPicture()">Take Depth Picture</v-btn>
                 <div>Max Value: {{maxValue}}</div>
                 <div>Min Value: {{minValue}}</div>
-                Paste depth data here and click submit to render it
-                <v-textarea v-model="textareaData" cols="50" rows="300"></v-textarea>
-                <v-btn @click="renderTextareaData()">Submit</v-btn>
+                <!-- Paste depth data here and click submit to render it -->
+                <!-- <v-textarea v-model="textareaData" cols="50" rows="300"></v-textarea> -->
+                <!-- <v-btn @click="renderTextareaData()">Submit</v-btn> -->
             </v-flex>
             <v-flex xs12 >
                 <div id="my_dataviz"></div>
