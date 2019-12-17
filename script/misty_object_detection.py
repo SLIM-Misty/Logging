@@ -20,6 +20,7 @@ import re
 from io import BytesIO
 import asyncio
 import websockets
+import json
 
 from distutils.version import StrictVersion
 from collections import defaultdict
@@ -63,6 +64,9 @@ PATH_TO_FROZEN_GRAPH = MODEL_NAME + '/frozen_inference_graph.pb'
 
 # List of the strings that is used to add correct label for each box.
 PATH_TO_LABELS = os.path.join('data', 'mscoco_label_map.pbtxt')
+
+SCREEN_CENTER_X = 320
+SCRREN_CENTER_Y = 240
 
 # ## Download Model
 opener = urllib.request.URLopener()
@@ -152,12 +156,169 @@ def run_inference_for_single_image(image, graph):
         output_dict['detection_masks'] = output_dict['detection_masks'][0]
   return output_dict
 
+def pure_pil_alpha_to_color(image, color=(255, 255, 255)):
+    """Alpha composite an RGBA Image with a specified color.
 
-# image should be a byte buffer representation of a 
+    Source: http://stackoverflow.com/a/9459208/284318
+
+    Keyword Arguments:
+    image -- PIL RGBA Image object
+    color -- Tuple r, g, b (default 255, 255, 255)
+
+    """
+    image.load()  # needed for split()
+    background = Image.new('RGB', image.size, color)
+    background.paste(image, mask=image.split()[3])  # 3 is the alpha channel
+    return background
+
+def get_bounding_box_depth_data(output_dict, image_depth_data, image_width, image_height):
+  # matches the detection threshold used
+  # in visualize_boxes_and_labels_on_image_array
+  detection_score_threshold = 0.5
+  # each bounding_box_depth_data value will be the corresponding
+  # depth data for a given detection box
+  bounding_box_depth_data = []
+  # each object detection box is an array whose values are in the form
+  # (top-left-x, top-left-y, bottom-right-x, bottom-right-y)
+  # each value is a range from 0 to 1
+  # e.g. top-left-x = 0.5, image_width = 300px => pixel value is 150px
+  detection_boxes = output_dict['detection_boxes']
+  detection_scores = output_dict['detection_scores']
+  for i in range(0, len(detection_boxes)):
+    if detection_scores[i] <= detection_score_threshold:
+      i = len(detection_boxes)
+      break
+    bounding_box_depth_data.append([])
+    detection_box = detection_boxes[i]
+    top_left_x = int(detection_box[0] * image_width)
+    top_left_y = int(detection_box[1] * image_height)
+    bottom_right_x = int(detection_box[2] * image_width)
+    bottom_right_y = int(detection_box[3] * image_height)
+    for y in range(top_left_y, bottom_right_y):
+      for x in range(top_left_x, bottom_right_x):
+        depth_value_index = (0 - x) + (y * image_width)
+        if depth_value_index >= 0 and depth_value_index < len(image_depth_data):
+          # these dicts are formatted to match the object schema used
+          # to render the d3.js heatmap in Logging/src/views/takeDepthPicture.vue
+          value = image_depth_data[depth_value_index]
+          bounding_box_depth_data[i].append({
+            x: x,
+            y: y,
+            value: value
+          })
+  
+  return bounding_box_depth_data
+
+
+def get_bounding_box_centroid_depth_data(output_dict, image_depth_data, image_width, image_height):
+  # this threshold is set to match the threshold that
+  # visualize_boxes_and_labels_on_image_array uses
+  detection_score_threshold = 0.5
+  bounding_box_centroid_depth_data = []
+  detection_boxes = output_dict['detection_boxes']
+  detection_scores = output_dict['detection_scores']
+  for i in range(0, len(detection_boxes)):
+    if detection_scores[i] <= detection_score_threshold:
+      i = len(detection_boxes)
+      break
+    # set the centroid_depth to NaN by default because
+    # we aren't sure whether the centroid will be within the bounds
+    # of our depth data
+    centroid_depth = "NaN"
+    detection_box = detection_boxes[i]
+    top_left_y = int(detection_box[0] * image_height)
+    top_left_x = int(detection_box[1] * image_width)
+    bottom_right_y = int(detection_box[2] * image_height)
+    bottom_right_x = int(detection_box[3] * image_width)
+    offset_direction = 0
+    offset_magnitude = -1
+    while centroid_depth == "NaN":
+      centroid_x = (bottom_right_x - top_left_x) / 2
+      centroid_y = (bottom_right_y - top_left_y) / 2
+      offset_direction += 1
+      offset_magnitude += 1
+      if offset_direction > 4:
+        offset_direction = 1
+      if offset_direction == 1:
+        # top
+        centroid_y += offset_magnitude
+      if offset_direction == 2:
+        # right
+        centroid_x += offset_magnitude
+      if offset_direction == 3:
+        # bottom
+        centroid_y -= offset_magnitude
+      if offset_direction == 4:
+        # left
+        centroid_x -= offset_magnitude
+      centroid_index = (0 - centroid_x) + (centroid_y * image_width)
+      # the centroid is outside the depth data
+      if centroid_index >= 0 and centroid_index < len(image_depth_data):
+        centroid_depth = -1
+      else:
+        centroid_depth = image_depth_data[centroid_index]
+    bounding_box_centroid_depth_data.append(centroid_depth)
+
+  return bounding_box_centroid_depth_data
+
+def get_turn_direction(detection_box):
+  turn_direction = "none"
+
+  top_left_x = detection_box[1]
+  bottom_right_x = detection_box[3]
+  x_center = top_left_x + ((bottom_right_x - top_left_x) / 2)
+
+  if x_center < 0.45:
+    turn_direction = "left"
+  if x_center > 0.55:
+    turn_direction = "right"
+  
+  print('turn_direction : ')
+  print(turn_direction)
+  return turn_direction
+
+def get_turn_speed(detection_box):
+  turn_speed = 0
+
+  top_left_x = detection_box[1]
+  bottom_right_x = detection_box[3]
+  x_center = top_left_x + ((bottom_right_x - top_left_x) / 2)
+
+  if x_center < 0.1 or x_center > 0.9:
+    turn_speed = 25
+  if x_center < 0.2 or x_center > 0.8:
+    turn_speed = 20
+  if x_center < 0.3 or x_center > 0.7:
+    turn_speed = 15
+  else:
+    turn_speed = 10
+  
+  print('turn_speed : ')
+  print(turn_speed)
+  return turn_speed
+
+
+# parses a base64 image to a pil image
+# then runs object detection on that image
+# if it is a fisheye image derive turn direction and speed
 async def process_image(websocket, message):
-  print("processing image . . . ")
-  image_base_64 = message
+  parsed_message = json.loads(message)
+  image_base_64 = parsed_message['image']
+  image_height = parsed_message['image_height']
+  image_width = parsed_message['image_width']
+  image_depth_data = parsed_message['image_depth_data']
+  is_fisheye_image = parsed_message['is_fisheye_image']
+  get_depth_data = parsed_message['get_depth_data']
+
+  # debugger
+  # import pdb; pdb.set_trace()
+
   img = Image.open(BytesIO(base64.b64decode(image_base_64)))
+  if is_fisheye_image:
+    # remove the alpha channel, fisheye images are in rgba
+    # and tensorflow just can't deal with that
+    img = pure_pil_alpha_to_color(img)
+  
   # the array based representation of the image will be used later in order to prepare the
   # result image with boxes and labels on it.
   image_np = load_image_into_numpy_array(img)
@@ -179,16 +340,49 @@ async def process_image(websocket, message):
   buff = BytesIO()
   pil_img.save(buff, format="JPEG")
   processed_image_base_64 = base64.b64encode(buff.getvalue()).decode("utf-8")
+
+  has_detections = len(output_dict['detection_boxes']) > 0
+  turn_direction = None
+  detection_boxes = output_dict['detection_boxes']
+  turn_speed = 0
+  if is_fisheye_image and has_detections:
+    # get a turn direction based off of the detection box
+    # with the greatest area
+    largest_detection_box_index = 0
+    largest_detection_box_value = 0
+    for i in range(0, len(detection_boxes)):
+      cur_box = detection_boxes[i]
+      # box size = (top_left_x - bottom_right_x) * (top_left_y - bottom_right_y)
+      cur_box_size = (cur_box[3] - cur_box[1]) * (cur_box[2] - cur_box[0])
+      is_past_score_threshold = output_dict['detection_scores'][i] >= 0.5
+      is_largest_box = cur_box_size > largest_detection_box_value
+      # category index 1 correspods to a 'person' detection
+      is_person = output_dict['detection_classes'][i] == 1
+      if is_past_score_threshold and is_largest_box and is_person:
+        largest_detection_box_value = cur_box_size
+        largest_detection_box_index = i
+    
+    largest_detection_box = output_dict['detection_boxes'][largest_detection_box_index]
+    turn_direction = get_turn_direction(largest_detetion_box)
+    turn_speed = get_turn_speed(largest_detection_box)
+
+  return_data = {}
+  return_data['processed_image'] = processed_image_base_64
+  return_data['turn_direction'] = turn_direction
+  return_data['turn_speed'] = turn_speed
   print("image successfully processed")
-  await websocket.send(processed_image_base_64)
+  await websocket.send(json.dumps(return_data))
 
 # Websocket logic 
 # https://websockets.readthedocs.io/en/stable/intro.html
 
 async def consumer_handler(websocket, path):
-    async for message in websocket:
-        await process_image(websocket, message)
+  async for message in websocket:
+    print('recvd messg')
+    await process_image(websocket, message)
 
+# 132.178.227.12 is the bsu gpu ip
+# start_server = websockets.serve(consumer_handler, 132.178.227.12, 8765)
 start_server = websockets.serve(consumer_handler, "localhost", 8765)
 print('Websocket listening on port 8765!')
 
