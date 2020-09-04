@@ -20,7 +20,7 @@
     "express": "^4.17.1",
     "method-override": "^3.0.0",
     "moment": "^2.24.0",
-    "papaparse": "^5.1.0",
+    "papaparse": "^5.2.0",
     "uuid": "^3.3.3",
     "vue": "^2.6.10",
     "vue-router": "^3.0.3",
